@@ -3,21 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>在线物理实验平台</title>
+    <title>物理实验平台</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- KaTeX 数学公式引擎 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-    <!-- 自定义样式 -->
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="bg-body transition-colors duration-300">
-    <!-- 顶部导航 -->
     <header class="acrylic sticky top-0 z-50 px-6 py-4 transition-colors duration-300">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-white/60 to-white/20 dark:from-white/10 dark:to-white/5 flex items-center justify-center shadow-sm transition-shadow hover:shadow-md">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="App.goHome()">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-white/60 to-white/20 dark:from-white/10 dark:to-white/5 flex items-center justify-center shadow-sm">
                     <svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
                     </svg>
@@ -29,129 +26,17 @@
             </div>
             
             <div class="flex items-center gap-4">
-                <div class="text-sm text-secondary hidden sm:block">
-                    实时物理模拟 · 可视化数据
-                </div>
-
-                <!-- 主题切换按钮 (已删除 vertical border) -->
+                <button id="back-home-btn" class="glass-btn px-3 py-1.5 rounded-lg text-sm font-medium text-main hidden" onclick="App.goHome()">← 返回实验选择</button>
                 <div class="flex items-center gap-2">
-                    <button id="theme-toggle" class="relative p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/20 transition-colors" aria-label="切换主题">
-                        <svg id="sun-icon" class="theme-icon absolute w-5 h-5 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                        <svg id="moon-icon" class="theme-icon absolute w-5 h-5 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                        </svg>
+                    <button id="theme-toggle" class="relative p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/20 transition-colors">
+                        <svg id="sun-icon" class="theme-icon absolute w-5 h-5 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        <svg id="moon-icon" class="theme-icon absolute w-5 h-5 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                     </button>
                 </div>
             </div>
         </div>
     </header>
-
-    <main class="max-w-7xl mx-auto px-6 py-8">
-        <!-- 实验选择卡片 -->
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-            <div class="acrylic-card rounded-2xl p-5 cursor-pointer active" data-exp="uniform" onclick="switchExperiment('uniform')">
-                <div class="w-12 h-12 rounded-xl bg-white/40 dark:bg-white/10 flex items-center justify-center mb-3 shadow-inner transition-all">
-                    <svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold mb-1 text-main">匀变速直线运动</h3>
-                <p class="text-xs text-muted">斜面木块下滑实验</p>
-            </div>
-            <div class="acrylic-card rounded-2xl p-5 cursor-pointer" data-exp="freefall" onclick="switchExperiment('freefall')">
-                <div class="w-12 h-12 rounded-xl bg-white/40 dark:bg-white/10 flex items-center justify-center mb-3 shadow-inner transition-all">
-                    <svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold mb-1 text-main">自由落体实验</h3>
-                <p class="text-xs text-muted">重力加速度测量</p>
-            </div>
-            <div class="acrylic-card rounded-2xl p-5 cursor-pointer" data-exp="pendulum" onclick="switchExperiment('pendulum')">
-                <div class="w-12 h-12 rounded-xl bg-white/40 dark:bg-white/10 flex items-center justify-center mb-3 shadow-inner transition-all">
-                    <svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold mb-1 text-main">单摆实验</h3>
-                <p class="text-xs text-muted">简谐运动周期研究</p>
-            </div>
-        </div>
-
-        <!-- 实验主区域 -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- 画布区域 -->
-            <div class="lg:col-span-2">
-                <div class="acrylic rounded-2xl p-6 experiment-panel">
-                    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-                        <h2 class="text-lg font-semibold text-main" id="exp-title">匀变速直线运动实验</h2>
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <div class="flex items-center gap-1 bg-white/40 dark:bg-white/5 rounded-lg p-1 shadow-sm border border-white/20 dark:border-white/10 speed-btn-group">
-                                <button class="speed-btn px-2 py-1 text-xs rounded-md text-main" data-speed="0.5">0.5×</button>
-                                <button class="speed-btn px-2 py-1 text-xs rounded-md active-speed text-main" data-speed="1">1×</button>
-                                <button class="speed-btn px-2 py-1 text-xs rounded-md text-main" data-speed="2">2×</button>
-                                <button class="speed-btn px-2 py-1 text-xs rounded-md text-main" data-speed="5">5×</button>
-                            </div>
-                            <button class="glass-btn px-3 py-1.5 rounded-lg text-sm font-medium text-main" id="reset-btn" onclick="resetExperiment()">⟳ 重置</button>
-                            <button class="glass-btn px-3 py-1.5 rounded-lg text-sm font-medium text-main" id="step-btn" onclick="stepForward()">⏭ 步进</button>
-                            <button class="glass-btn-primary px-4 py-1.5 rounded-lg text-sm font-medium" id="play-btn" onclick="togglePlay()">▶ 开始</button>
-                        </div>
-                    </div>
-                    <canvas id="experimentCanvas" width="800" height="450" class="w-full rounded-xl shadow-inner border border-white/20 dark:border-white/5"></canvas>
-                    
-                    <div class="mt-4 grid grid-cols-2 gap-4">
-                        <div class="acrylic-dark rounded-xl p-3 transition-colors hover:bg-white/40 dark:hover:bg-white/5">
-                            <p class="text-xs text-secondary mb-2 font-mono tracking-wide">速度-时间图像 (v-t)</p>
-                            <canvas id="vtChart" width="440" height="160" class="w-full rounded-lg"></canvas>
-                        </div>
-                        <div class="acrylic-dark rounded-xl p-3 transition-colors hover:bg-white/40 dark:hover:bg-white/5">
-                            <p class="text-xs text-secondary mb-2 font-mono tracking-wide">位移-时间图像 (s-t)</p>
-                            <canvas id="stChart" width="440" height="160" class="w-full rounded-lg"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 控制面板 -->
-            <div class="space-y-4 max-h-[660px] overflow-y-auto scrollbar-thin pr-2 custom-scrollbar">
-                <!-- 参数调节 -->
-                <div class="acrylic rounded-2xl p-5 experiment-panel">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2 text-main">
-                        <svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
-                        </svg>
-                        参数调节
-                    </h3>
-                    <div id="params-container" class="space-y-5"></div>
-                </div>
-
-                <!-- 实时数据 -->
-                <div class="acrylic rounded-2xl p-5 experiment-panel">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2 text-main">
-                        <svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                        </svg>
-                        实时数据
-                    </h3>
-                    <div id="data-container" class="space-y-2 divide-y divide-border-color/50"></div>
-                </div>
-
-                <!-- 实验原理 -->
-                <div class="acrylic rounded-2xl p-5 experiment-panel">
-                    <h3 class="font-semibold mb-3 flex items-center gap-2 text-main">
-                        <svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        实验原理
-                    </h3>
-                    <div id="theory-container" class="text-sm text-main leading-relaxed space-y-1.5"></div>
-                </div>
-            </div>
-        </div>
-    </main>
-
+    <main class="max-w-7xl mx-auto px-6 py-8" id="app"></main>
     <script src="js/main.js"></script>
 </body>
 </html>

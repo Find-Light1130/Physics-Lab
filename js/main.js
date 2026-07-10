@@ -6,7 +6,8 @@ let time = 0;
 let lastTime = null;
 let dataHistory = { v: [], s: [], t: [] };
 let state = {};
-let speedMultiplier = 1;          // 新增：速度倍率
+let speedMultiplier = 1;
+let renderRequested = false; // 用于防卡顿节流标记
 
 const canvas = document.getElementById('experimentCanvas');
 const ctx = canvas.getContext('2d');
@@ -27,13 +28,13 @@ slopeConfig.angle = Math.atan2(slopeConfig.endY - slopeConfig.startY, slopeConfi
 slopeConfig.totalPixelLength = Math.hypot(slopeConfig.endX - slopeConfig.startX, slopeConfig.endY - slopeConfig.startY);
 slopeConfig.maxDistance = slopeConfig.totalPixelLength / slopeConfig.pixelPerMeter;
 
-// ==================== 实验配置数据（移除 balance） ====================
+// ==================== 实验配置数据 (所有步长修改为0.1) ====================
 const experiments = {
     uniform: {
         title: '匀变速直线运动实验（斜面木块）',
         params: [
-            { id: 'v0', name: '初速度 v₀', min: 0, max: 5, step: 0.5, default: 0, unit: 'm/s' },
-            { id: 'a', name: '加速度 a', min: -5, max: 10, step: 0.5, default: 4, unit: 'm/s²' }
+            { id: 'v0', name: '初速度 v₀', min: 0, max: 5, step: 0.1, default: 0, unit: 'm/s' },
+            { id: 'a', name: '加速度 a', min: -5, max: 10, step: 0.1, default: 4, unit: 'm/s²' }
         ],
         values: { v0: 0, a: 4 },
         theory: [
@@ -46,8 +47,8 @@ const experiments = {
     freefall: {
         title: '自由落体实验',
         params: [
-            { id: 'h', name: '下落高度 h', min: 10, max: 200, step: 5, default: 100, unit: 'm' },
-            { id: 'g', name: '重力加速度 g', min: 1, max: 20, step: 0.5, default: 9.8, unit: 'm/s²' }
+            { id: 'h', name: '下落高度 h', min: 10, max: 200, step: 0.1, default: 100, unit: 'm' },
+            { id: 'g', name: '重力加速度 g', min: 1, max: 20, step: 0.1, default: 9.8, unit: 'm/s²' }
         ],
         values: { h: 100, g: 9.8 },
         theory: [
@@ -62,15 +63,18 @@ const experiments = {
         title: '单摆实验',
         params: [
             { id: 'L', name: '摆长 L', min: 0.5, max: 3, step: 0.1, default: 1.5, unit: 'm' },
-            { id: 'theta0', name: '摆角 θ₀', min: 5, max: 45, step: 1, default: 15, unit: '°' },
-            { id: 'g', name: '重力加速度 g', min: 1, max: 20, step: 0.5, default: 9.8, unit: 'm/s²' }
+            { id: 'theta0', name: '摆角 θ₀', min: 5, max: 45, step: 0.1, default: 15, unit: '°' },
+            { id: 'g', name: '重力加速度 g', min: 1, max: 20, step: 0.1, default: 9.8, unit: 'm/s²' }
         ],
         values: { L: 1.5, theta0: 15, g: 9.8 },
         theory: [
             '单摆周期公式：$T = 2\\pi \\sqrt{\\frac{L}{g}}$',
             '小角度下周期与振幅、摆球质量无关',
             '摆角小于5°时简谐运动近似成立',
-            '角频率：$\\omega = \\sqrt{\\frac{g}{L}}$'
+            '角频率：$\\omega = \\sqrt{\\frac{g}{L}}$',
+            '角位移方程（小角度近似）：$\\theta(t) = \\theta_0 \\cos(\\omega t)$',
+            '水平位移：$x(t) = L \\theta(t) = L \\theta_0 \\cos(\\omega t)$',
+            '速度方程：$v(t) = -L \\omega \\theta_0 \\sin(\\omega t)$'
         ]
     }
 };
@@ -102,33 +106,78 @@ function switchExperiment(expId) {
     });
 }
 
-// ==================== 参数面板渲染 ====================
+// ==================== 参数面板渲染与交互控制 (输入框绑定) ====================
 function renderParams() {
     const container = document.getElementById('params-container');
     const exp = experiments[currentExperiment];
 
     container.innerHTML = exp.params.map(p => `
         <div class="slider-container">
-            <div class="flex justify-between text-sm mb-2">
-                <span class="text-gray-700">${p.name}</span>
-                <span class="data-display font-medium text-gray-800" id="val-${p.id}">${p.default} ${p.unit}</span>
+            <div class="flex justify-between text-sm mb-1.5 items-center">
+                <span class="text-main">${p.name}</span>
+                <div class="flex items-center gap-1">
+                    <input type="number" id="num-${p.id}" class="param-input" 
+                           min="${p.min}" max="${p.max}" step="0.1" 
+                           value="${p.default}" 
+                           oninput="updateNumParam('${p.id}', this.value, '${p.unit}')" />
+                    <span class="text-xs text-muted">${p.unit}</span>
+                </div>
             </div>
-            <input type="range" id="slider-${p.id}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}"
-                oninput="updateParam('${p.id}', this.value, '${p.unit}')">
+            <input type="range" id="slider-${p.id}" min="${p.min}" max="${p.max}" step="0.1" value="${p.default}"
+                oninput="updateParam('${p.id}', this.value, '${p.unit}')"
+                style="background: linear-gradient(to right, #475569 0%, #475569 ${((p.default - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) ${((p.default - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) 100%);">
         </div>
     `).join('');
 }
 
+// 滑块更新逻辑 (防卡顿节流)
 function updateParam(id, value, unit) {
-    experiments[currentExperiment].values[id] = parseFloat(value);
-    document.getElementById(`val-${id}`).textContent = value + ' ' + unit;
-    if (currentExperiment === 'freefall') {
-        resetExperimentState();  // 重新计算虚影时刻
+    const val = parseFloat(value);
+    if (isNaN(val)) return;
+    experiments[currentExperiment].values[id] = val;
+    
+    // 更新输入框
+    const numInput = document.getElementById(`num-${id}`);
+    if (numInput && numInput.value !== value) {
+        numInput.value = value;
     }
-    if (!isPlaying) {
-        resetExperimentState();
+
+    // 更新滑块背景进度条
+    const slider = document.getElementById(`slider-${id}`);
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    const percentage = ((val - min) / (max - min)) * 100;
+    const trackColor = document.body.classList.contains('dark') ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)';
+    slider.style.background = `linear-gradient(to right, #475569 0%, #475569 ${percentage}%, ${trackColor} ${percentage}%, ${trackColor} 100%)`;
+
+    // 触发重置
+    time = 0;
+    lastTime = null;
+    dataHistory = { v: [], s: [], t: [] };
+    resetExperimentState();
+    
+    // 使用 requestAnimationFrame 节流绘制，防止拖拽卡顿
+    if (!renderRequested) {
+        renderRequested = true;
+        requestAnimationFrame(() => {
+            renderRequested = false;
+            draw();
+        });
     }
-    draw();
+}
+
+// 输入框更新逻辑
+function updateNumParam(id, value, unit) {
+    const val = parseFloat(value);
+    if (isNaN(val)) return;
+    
+    // 边界限制
+    const exp = experiments[currentExperiment];
+    const p = exp.params.find(p => p.id === id);
+    const clampedVal = Math.min(Math.max(val, p.min), p.max);
+    
+    // 同步触发更新
+    updateParam(id, clampedVal.toFixed(1), unit);
 }
 
 // ==================== 原理面板渲染 ====================
@@ -157,7 +206,6 @@ function togglePlay() {
 // ==================== 速度倍率控制 ====================
 function setSpeed(mult) {
     speedMultiplier = mult;
-    // 更新按钮高亮
     document.querySelectorAll('.speed-btn').forEach(btn => {
         btn.classList.remove('active-speed');
         if (parseFloat(btn.dataset.speed) === mult) {
@@ -166,39 +214,27 @@ function setSpeed(mult) {
     });
 }
 
-// 绑定速度按钮事件（在 DOM 加载后执行）
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.speed-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            setSpeed(parseFloat(this.dataset.speed));
-        });
-    });
-    // 默认激活 1×
-    setSpeed(1);
-});
-
 // ==================== 重置实验 ====================
 function resetExperiment() {
-    // 若正在播放则暂停
     if (isPlaying) {
-        togglePlay(); // 暂停
+        togglePlay();
     }
     time = 0;
     lastTime = null;
     dataHistory = { v: [], s: [], t: [] };
-    resetExperimentState();  // 内部会重新计算虚影（自由落体）
+    resetExperimentState();
     draw();
 }
 
-// ==================== 步进（逐帧） ====================
+// ==================== 步进 ====================
 function stepForward() {
-    if (isPlaying) return; // 播放时步进无效
-    const dt = 0.02 * speedMultiplier; // 固定小步长，受倍率影响
+    if (isPlaying) return;
+    const dt = 0.016 * speedMultiplier;
     updatePhysics(dt);
     draw();
 }
 
-// ==================== 自由落体虚影时刻计算 ====================
+// ==================== 自由落体虚影 ====================
 function computeFreefallTrails() {
     const vals = experiments.freefall.values;
     const h = vals.h;
@@ -277,7 +313,6 @@ function updatePhysics(dt) {
                 state.v = newV;
                 state.s = newS;
 
-                // 检查虚影生成
                 const scale = 350 / vals.h;
                 const startY = 50;
                 for (let i = 0; i < state.trails.length; i++) {
@@ -308,17 +343,17 @@ function updatePhysics(dt) {
                 state.omega *= energyScale;
             }
 
-            const linearV = state.omega * vals.L;
+            const linearV = state.omega * vals.L; 
             const arc = state.theta * vals.L;
 
             dataHistory.t.push(time);
-            dataHistory.v.push(Math.abs(linearV));
+            dataHistory.v.push(linearV);
             dataHistory.s.push(arc);
             break;
         }
     }
 
-    if (dataHistory.t.length > 200) {
+    if (dataHistory.t.length > 800) {
         dataHistory.t.shift();
         dataHistory.v.shift();
         dataHistory.s.shift();
@@ -343,6 +378,9 @@ function draw() {
 function drawGrid() {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
     ctx.lineWidth = 1;
+    if(document.body.classList.contains('dark')) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    }
 
     for (let x = 0; x < canvas.width; x += 40) {
         ctx.beginPath();
@@ -358,11 +396,11 @@ function drawGrid() {
     }
 }
 
-// ==================== 匀变速直线运动绘制 ====================
 function drawUniformMotion() {
     const { startX, startY, endX, endY, angle, pixelPerMeter } = slopeConfig;
+    const isDark = document.body.classList.contains('dark');
 
-    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
     ctx.beginPath();
     ctx.moveTo(startX - 20, startY);
     ctx.lineTo(endX + 20, endY);
@@ -371,32 +409,29 @@ function drawUniformMotion() {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(startX, startY);
     ctx.lineTo(endX, endY);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
     ctx.font = '10px monospace';
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)';
     ctx.lineWidth = 1;
 
     for (let i = 0; i <= 6; i++) {
         const s = i * 3;
         const px = startX + s * pixelPerMeter * Math.cos(angle);
         const py = startY + s * pixelPerMeter * Math.sin(angle);
-
         if (px > endX) break;
-
         const perpX = -Math.sin(angle) * 8;
         const perpY = Math.cos(angle) * 8;
         ctx.beginPath();
         ctx.moveTo(px, py);
         ctx.lineTo(px + perpX, py + perpY);
         ctx.stroke();
-
         ctx.save();
         ctx.translate(px + perpX * 1.5, py + perpY * 1.5);
         ctx.rotate(angle);
@@ -431,24 +466,20 @@ function drawUniformMotion() {
         ctx.lineTo(20, i);
         ctx.stroke();
     }
-
     ctx.restore();
 
     if (Math.abs(state.v) > 0.1) {
         const arrowLen = state.v * 8;
         const arrowStartY = -25;
-
         ctx.save();
         ctx.translate(blockX, blockY);
         ctx.rotate(angle);
-
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(0, arrowStartY);
         ctx.lineTo(arrowLen, arrowStartY);
         ctx.stroke();
-
         const dir = state.v > 0 ? 1 : -1;
         ctx.beginPath();
         ctx.moveTo(arrowLen, arrowStartY);
@@ -457,12 +488,10 @@ function drawUniformMotion() {
         ctx.closePath();
         ctx.fillStyle = '#ef4444';
         ctx.fill();
-
         ctx.restore();
     }
 }
 
-// ==================== 自由落体绘制（动态生成5个虚影） ====================
 function drawFreeFall() {
     const vals = experiments.freefall.values;
     const scale = 350 / vals.h;
@@ -470,9 +499,10 @@ function drawFreeFall() {
     const groundY = startY + 350;
     const ballX = 400;
     const ballY = startY + state.s * scale;
+    const isDark = document.body.classList.contains('dark');
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
     ctx.font = '10px monospace';
     ctx.lineWidth = 1;
 
@@ -485,10 +515,9 @@ function drawFreeFall() {
         ctx.fillText(Math.round(vals.h - i * vals.h / 5) + 'm', 20, y + 4);
     }
 
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)';
     ctx.fillRect(0, groundY, canvas.width, 50);
 
-    // 绘制已生成的虚影
     if (state.trails) {
         for (let i = 0; i < state.trails.length; i++) {
             const trail = state.trails[i];
@@ -507,7 +536,6 @@ function drawFreeFall() {
         }
     }
 
-    // 当前小球
     const gradient = ctx.createRadialGradient(ballX - 5, ballY - 5, 0, ballX, ballY, 18);
     gradient.addColorStop(0, '#93c5fd');
     gradient.addColorStop(1, '#3b82f6');
@@ -535,7 +563,6 @@ function drawFreeFall() {
     }
 }
 
-// ==================== 单摆绘制 ====================
 function drawPendulum() {
     const vals = experiments.pendulum.values;
     const pivotX = 400;
@@ -544,11 +571,12 @@ function drawPendulum() {
 
     const bobX = pivotX + pixelL * Math.sin(state.theta);
     const bobY = pivotY + pixelL * Math.cos(state.theta);
+    const isDark = document.body.classList.contains('dark');
 
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
     ctx.fillRect(300, 40, 200, 15);
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(pivotX, pivotY);
@@ -570,7 +598,7 @@ function drawPendulum() {
     ctx.stroke();
 
     ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)';
     ctx.beginPath();
     ctx.moveTo(pivotX, pivotY);
     ctx.lineTo(pivotX, pivotY + pixelL + 30);
@@ -592,44 +620,99 @@ function drawPendulum() {
     }
 }
 
-// ==================== 图表绘制 ====================
 function drawCharts() {
     drawLineChart(vtCtx, vtCanvas, dataHistory.t, dataHistory.v, '#fbbf24');
     drawLineChart(stCtx, stCanvas, dataHistory.t, dataHistory.s, '#4ade80');
 }
 
+function getControlPoints(x0, y0, x1, y1, x2, y2, t) {
+    const d01 = Math.hypot(x1 - x0, y1 - y0);
+    const d12 = Math.hypot(x2 - x1, y2 - y1);
+    const fa = t * d01 / (d01 + d12);
+    const fb = t * d12 / (d01 + d12);
+    return {
+        cp1x: x1 - fa * (x2 - x0),
+        cp1y: y1 - fa * (y2 - y0),
+        cp2x: x1 + fb * (x2 - x0),
+        cp2y: y1 + fb * (y2 - y0)
+    };
+}
+
 function drawLineChart(c, canv, xData, yData, color) {
     c.clearRect(0, 0, canv.width, canv.height);
-
     if (xData.length < 2) return;
 
-    const maxY = Math.max(...yData, 0.1);
-    const padding = 5;
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    c.imageSmoothingEnabled = true;
+
+    const isDark = document.body.classList.contains('dark');
+
+    let minData = Math.min(...yData);
+    let maxData = Math.max(...yData, 1); 
+
+    let range = maxData - minData;
+    if (range < 1) range = 1;
+    maxData += range * 0.1;
+    const hasNeg = yData.some(v => v < 0);
+    if (hasNeg) {
+        minData -= range * 0.1;
+    } else {
+        minData = -range * 0.1;
+    }
+
+    const padding = 6;
     const w = canv.width - padding * 2;
     const h = canv.height - padding * 2;
 
-    c.strokeStyle = 'rgba(0,0,0,0.1)';
+    const zeroY = canv.height - padding - ((0 - minData) / (maxData - minData)) * h;
+
+    c.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
     c.lineWidth = 1;
+    c.setLineDash([]);
     c.beginPath();
-    c.moveTo(padding, canv.height - padding);
-    c.lineTo(canv.width - padding, canv.height - padding);
+    c.moveTo(padding, padding);
+    c.lineTo(padding, canv.height - padding);
     c.stroke();
-
-    c.strokeStyle = color;
-    c.lineWidth = 2;
+    
+    c.strokeStyle = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
+    c.setLineDash([4, 4]);
     c.beginPath();
+    c.moveTo(padding, zeroY);
+    c.lineTo(canv.width - padding, zeroY);
+    c.stroke();
+    c.setLineDash([]);
 
+    const points = [];
     for (let i = 0; i < xData.length; i++) {
         const px = padding + (i / (xData.length - 1)) * w;
-        const py = canv.height - padding - (yData[i] / maxY) * h;
+        const py = canv.height - padding - ((yData[i] - minData) / (maxData - minData)) * h;
+        points.push({x: px, y: py});
+    }
 
-        if (i === 0) c.moveTo(px, py);
-        else c.lineTo(px, py);
+    c.strokeStyle = color;
+    c.lineWidth = 2.5;
+    c.beginPath();
+    c.moveTo(points[0].x, points[0].y);
+
+    if (points.length > 4) {
+        for (let i = 0; i < points.length - 2; i++) {
+            const p0 = points[i];
+            const p1 = points[i + 1];
+            const p2 = points[i + 2];
+            const t = 0.5;
+            const cp = getControlPoints(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, t);
+            c.bezierCurveTo(cp.cp1x, cp.cp1y, cp.cp2x, cp.cp2y, p2.x, p2.y);
+        }
+    } else {
+        for (let i = 1; i < points.length; i++) {
+            c.lineTo(points[i].x, points[i].y);
+        }
     }
     c.stroke();
 
-    c.lineTo(padding + w, canv.height - padding);
-    c.lineTo(padding, canv.height - padding);
+    c.lineTo(points[points.length - 1].x, zeroY);
+    c.lineTo(points[0].x, zeroY);
     c.closePath();
 
     const gradient = c.createLinearGradient(0, 0, 0, canv.height);
@@ -639,16 +722,15 @@ function drawLineChart(c, canv, xData, yData, color) {
     c.fill();
 }
 
-// ==================== 数据面板更新 ====================
 function updateDataDisplay() {
     const container = document.getElementById('data-container');
     const vals = experiments[currentExperiment].values;
     let html = '';
 
     const dataItem = (label, value, unit) => `
-        <div class="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
-            <span class="text-gray-600 text-sm">${label}</span>
-            <span class="data-display font-medium text-gray-800">${value} <span class="text-xs text-gray-400">${unit}</span></span>
+        <div class="flex justify-between items-center py-2 border-b border-border-color last:border-0 hover:bg-black/5 dark:hover:bg-white/5 transition-colors rounded px-2 -mx-2">
+            <span class="text-secondary text-sm">${label}</span>
+            <span class="data-display font-medium text-main">${value} <span class="text-xs text-muted">${unit}</span></span>
         </div>
     `;
 
@@ -690,9 +772,13 @@ function animate(timestamp) {
         return;
     }
 
-    // 应用速度倍率，并限制最大步长防止跳帧
     let rawDt = (timestamp - lastTime) / 1000 * speedMultiplier;
-    const maxDt = 0.05 * speedMultiplier; // 允许的最大步长
+    
+    if (rawDt > 0.2) {
+        rawDt = 0.016 * speedMultiplier;
+    }
+
+    const maxDt = 0.016 * speedMultiplier; 
     const dt = Math.min(rawDt, maxDt);
     lastTime = timestamp;
 
@@ -702,9 +788,40 @@ function animate(timestamp) {
     animationId = requestAnimationFrame(animate);
 }
 
+// ==================== 主题切换功能 ====================
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.body.classList.add('dark');
+    } else {
+        document.body.classList.remove('dark');
+    }
+}
+
 // ==================== 初始化 ====================
 function init() {
+    const toggleBtn = document.getElementById('theme-toggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+            document.body.classList.toggle('dark');
+            const isDark = document.body.classList.contains('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            draw();
+        });
+    }
+
+    initTheme();
     switchExperiment('uniform');
 }
 
-init();
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            setSpeed(parseFloat(this.dataset.speed));
+        });
+    });
+    setSpeed(1);
+    init();
+});

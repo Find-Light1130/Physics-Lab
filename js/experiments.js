@@ -6,19 +6,26 @@ function getControlPoints(x0, y0, x1, y1, x2, y2, t) {
     return { cp1x: x1 - fa * (x2 - x0), cp1y: y1 - fa * (y2 - y0), cp2x: x1 + fb * (x2 - x0), cp2y: y1 + fb * (y2 - y0) };
 }
 
+// ==================== 【核心修复】图表绘制引擎 ====================
 function drawLineChart(c, canv, xData, yData, color) {
     c.clearRect(0, 0, canv.width, canv.height);
     if (xData.length < 2) return;
     c.lineJoin = 'round'; c.lineCap = 'round'; c.imageSmoothingEnabled = true;
     const isDark = document.body.classList.contains('dark');
-    let minData = Math.min(...yData), maxData = Math.max(...yData, 1), range = maxData - minData;
-    if (range < 1) range = 1; maxData += range * 0.1;
-    const hasNeg = yData.some(v => v < 0); if (hasNeg) minData -= range * 0.1; else minData = -range * 0.1;
+
+    // 【修复】强制 Y 轴以 0 为中心上下对称，解决图像被压在最底部或最顶部的问题
+    let maxAbs = Math.max(...yData.map(v => Math.abs(v)), 1);
+    let range = maxAbs * 2 + maxAbs * 0.2; // 上下两端各留 10% 的视觉边距
+    let minData = -range / 2;
+    let maxData = range / 2;
+
     const padding = 6, w = canv.width - padding * 2, h = canv.height - padding * 2;
     const zeroY = canv.height - padding - ((0 - minData) / (maxData - minData)) * h;
+
     c.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
     c.lineWidth = 1; c.beginPath(); c.moveTo(padding, padding); c.lineTo(padding, canv.height - padding); c.stroke();
     c.strokeStyle = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'; c.setLineDash([4,4]); c.beginPath(); c.moveTo(padding, zeroY); c.lineTo(canv.width - padding, zeroY); c.stroke(); c.setLineDash([]);
+    
     const points = [];
     for (let i = 0; i < xData.length; i++) {
         const px = padding + (i / (xData.length - 1)) * w;
@@ -79,19 +86,7 @@ const UniformModule = {
     },
     renderParams() {
         const p = [{ id: 'v0', name: '初速度 v₀', min: 0, max: 5, def: this.initValues.v0, unit: 'm/s' }, { id: 'a', name: '加速度 a', min: -5, max: 10, def: this.initValues.a, unit: 'm/s²' }];
-        // 【核心修改 1】移除了背景胶囊组 (`bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-md`)，数字左对齐，单位右对齐。
-        return p.map(p => `
-        <div class="slider-container mb-5 last:mb-0">
-            <div class="flex justify-between text-sm mb-2 items-center">
-                <span class="text-main font-medium">${p.name}</span>
-                <div class="flex items-center justify-between w-24">
-                    <input type="number" id="num-${p.id}" class="param-input w-16" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('uniform').updateParam('${p.id}', this.value)" />
-                    <span class="text-xs text-muted text-right w-8">${p.unit}</span>
-                </div>
-            </div>
-            <input type="range" id="slider-${p.id}" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('uniform').updateParam('${p.id}', this.value)" style="background: linear-gradient(to right, #475569 0%, #475569 ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) 100%);">
-        </div>
-        `).join('');
+        return p.map(p => `<div class="slider-container mb-5 last:mb-0"><div class="flex justify-between text-sm mb-2 items-center"><span class="text-main font-medium">${p.name}</span><div class="flex items-center justify-between w-24"><input type="number" id="num-${p.id}" class="param-input w-16" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('uniform').updateParam('${p.id}', this.value)" /><span class="text-xs text-muted text-right w-8">${p.unit}</span></div></div><input type="range" id="slider-${p.id}" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('uniform').updateParam('${p.id}', this.value)" style="background: linear-gradient(to right, #475569 0%, #475569 ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) 100%);"></div>`).join('');
     },
     updateParam(id, val) { const v = parseFloat(val); if (isNaN(v)) return; this.initValues[id] = v; document.getElementById(`num-${id}`).value = v.toFixed(1); const s = document.getElementById(`slider-${id}`); const pct = ((v - s.min) / (s.max - s.min)) * 100; s.style.background = `linear-gradient(to right, #475569 0%, #475569 ${pct}%, rgba(0,0,0,0.10) ${pct}%, rgba(0,0,0,0.10) 100%)`; this.reset(); },
     renderTheory() { return `<p>• 速度公式：$v = v_0 + at$</p><p>• 位移公式：$s = v_0 t + \\frac{1}{2} a t^2$</p><p>• 速度位移关系：$v^2 - v_0^2 = 2 a s$</p>`; },
@@ -166,7 +161,6 @@ const FreefallModule = {
     computeTrails() { const T = Math.sqrt(2 * this.initValues.h / this.initValues.g); this.state.trails = [1, 2, 3, 4, 5].map(i => ({ time: (i - 0.5) * T / 5, generated: false, x: 400, y: 0 })); },
     renderParams() {
         const p = [{ id: 'h', name: '下落高度 h', min: 10, max: 200, def: this.initValues.h, unit: 'm' }, { id: 'g', name: '重力加速度 g', min: 1, max: 20, def: this.initValues.g, unit: 'm/s²' }];
-        // 【核心修改 1】去除背景胶囊容器，数字左对齐，单位右对齐
         return p.map(p => `<div class="slider-container mb-5 last:mb-0"><div class="flex justify-between text-sm mb-2 items-center"><span class="text-main font-medium">${p.name}</span><div class="flex items-center justify-between w-24"><input type="number" id="num-${p.id}" class="param-input w-16" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('freefall').updateParam('${p.id}', this.value)" /><span class="text-xs text-muted text-right w-8">${p.unit}</span></div></div><input type="range" id="slider-${p.id}" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('freefall').updateParam('${p.id}', this.value)" style="background: linear-gradient(to right, #475569 0%, #475569 ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) 100%);"></div>`).join('');
     },
     updateParam(id, val) { const v = parseFloat(val); if (isNaN(v)) return; this.initValues[id] = v; document.getElementById(`num-${id}`).value = v.toFixed(1); const s = document.getElementById(`slider-${id}`); const pct = ((v - s.min) / (s.max - s.min)) * 100; s.style.background = `linear-gradient(to right, #475569 0%, #475569 ${pct}%, rgba(0,0,0,0.10) ${pct}%, rgba(0,0,0,0.10) 100%)`; this.reset(); },
@@ -264,7 +258,6 @@ const PendulumModule = {
     },
     renderParams() {
         const p = [{ id: 'L', name: '摆长 L', min: 0.5, max: 3, def: this.initValues.L, unit: 'm' }, { id: 'theta0', name: '摆角 θ₀', min: 5, max: 45, def: this.initValues.theta0, unit: '°' }, { id: 'g', name: '重力加速度 g', min: 1, max: 20, def: this.initValues.g, unit: 'm/s²' }];
-        // 【核心修改 1】去除背景胶囊容器，数字左对齐，单位右对齐
         return p.map(p => `<div class="slider-container mb-5 last:mb-0"><div class="flex justify-between text-sm mb-2 items-center"><span class="text-main font-medium">${p.name}</span><div class="flex items-center justify-between w-24"><input type="number" id="num-${p.id}" class="param-input w-16" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('pendulum').updateParam('${p.id}', this.value)" /><span class="text-xs text-muted text-right w-8">${p.unit}</span></div></div><input type="range" id="slider-${p.id}" min="${p.min}" max="${p.max}" step="0.1" value="${p.def}" oninput="App.getModule('pendulum').updateParam('${p.id}', this.value)" style="background: linear-gradient(to right, #475569 0%, #475569 ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) ${((p.def - p.min) / (p.max - p.min)) * 100}%, rgba(0,0,0,0.10) 100%);"></div>`).join('');
     },
     updateParam(id, val) { const v = parseFloat(val); if (isNaN(v)) return; this.initValues[id] = v; document.getElementById(`num-${id}`).value = v.toFixed(1); const s = document.getElementById(`slider-${id}`); const pct = ((v - s.min) / (s.max - s.min)) * 100; s.style.background = `linear-gradient(to right, #475569 0%, #475569 ${pct}%, rgba(0,0,0,0.10) ${pct}%, rgba(0,0,0,0.10) 100%)`; this.reset(); },

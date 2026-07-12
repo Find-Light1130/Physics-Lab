@@ -11,6 +11,7 @@
     --color-main: #0f172a;
     --color-secondary: #334155;
     --color-muted: #64748b;
+    --mech-cyan: #0d9488; /* 【修正】白昼模式下的深青色 */
 }
 body.dark {
     --bg-body: #1b1b1f;
@@ -22,6 +23,7 @@ body.dark {
     --color-main: #f1f5f9;
     --color-secondary: #94a3b8;
     --color-muted: #64748b;
+    --mech-cyan: #00ffcc; /* 【修正】深色模式下的霓虹青色 */
 }
 body { background: var(--bg-body) !important; min-height: 100vh; }
 .text-main { color: var(--color-main) !important; }
@@ -68,3 +70,41 @@ body.dark canvas { background: #2d2d35; box-shadow: inset 0 1px 4px rgba(255,255
 body.dark .scrollbar-thin::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 4px; }
 body.dark .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
+
+/* ========================================= */
+/* 机械3D悬停卡片UI特效（无拆解版） */
+/* ========================================= */
+.mech-card {
+    position: relative;
+    overflow: hidden;
+    transform-style: preserve-3d;
+    perspective: 800px;
+}
+.icon-wrapper {
+    transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+    transform-style: preserve-3d;
+}
+.mech-card:hover .icon-wrapper {
+    transform: rotateX(6deg) rotateY(-8deg) rotateZ(2deg) scale(1.05);
+}
+/* 科技扫描线特效 */
+.mech-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 204, 0.2), transparent);
+    transform: skewX(-25deg);
+    transition: left 0.6s ease;
+    pointer-events: none;
+}
+.mech-card:hover::before {
+    left: 200%;
+}
+/* 底部文字高亮 */
+.mech-card:hover .text-xs {
+    color: var(--mech-cyan) !important;
+    opacity: 1 !important;
+    letter-spacing: 1px;
+    transition: all 0.4s ease;
+}

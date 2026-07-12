@@ -6,7 +6,6 @@ function getControlPoints(x0, y0, x1, y1, x2, y2, t) {
     return { cp1x: x1 - fa * (x2 - x0), cp1y: y1 - fa * (y2 - y0), cp2x: x1 + fb * (x2 - x0), cp2y: y1 + fb * (y2 - y0) };
 }
 
-// ==================== 【图表绘制引擎】 ====================
 function drawLineChart(c, canv, xData, yData, color, xLabel = 't / s', yLabel = 'v / (m·s⁻¹)') {
     c.clearRect(0, 0, canv.width, canv.height);
     if (xData.length < 2) return;
@@ -53,7 +52,6 @@ function drawLineChart(c, canv, xData, yData, color, xLabel = 't / s', yLabel = 
     c.fillText(yLabel, padding + 10, padding);
 }
 
-// ==================== 统一物理风格绘图工具 ====================
 function drawPhysicsHatch(c, startX, endX, lineY, isDark, spacing = 28) {
     const color = isDark ? '#94a3b8' : '#475569';
     c.strokeStyle = color;
@@ -74,6 +72,7 @@ function drawPhysicsHatch(c, startX, endX, lineY, isDark, spacing = 28) {
 // ==================== 1. 匀变速直线运动 ====================
 const UniformModule = {
     id: 'uniform', title: '匀变速直线运动', desc: '斜面木块下滑实验',
+    // 【恢复】去除拆解类，恢复为合并的 SVG
     icon: `<svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>`,
     state: null, speed: 1, initValues: { v0: 0, a: 4 }, slopeConfig: { startX: 100, startY: 80, endX: 700, endY: 380, pixelPerMeter: 30 },
     createState() {
@@ -102,11 +101,45 @@ const UniformModule = {
         if (this.state.bounceTimer > 0) { this.state.bounceTimer -= dt; if (this.state.bounceTimer <= 0) { this.state.bounceTimer = 0; this.reset(); return; } }
         this.updatePhysics(dt); this.draw(); this.state.animId = requestAnimationFrame(() => this.loop()); },
     step() { if (this.state.playing) return; if (this.state.bounceTimer > 0) return; this.updatePhysics(0.016 * this.speed); this.draw(); },
-    updatePhysics(dt) { this.state.t += dt; const maxS = this.slopeConfig.maxDistance; const newV = this.state.v + this.initValues.a * dt; const newS = this.state.s + this.state.v * dt + 0.5 * this.initValues.a * dt * dt; 
-        if ((newS >= maxS && newV > 0) || (newS <= 0 && newV < 0)) { 
-            if (!this.state.bounceTimer) { this.state.bounceTimer = 0.3; this.state.v = 0; this.state.s = Math.max(0, Math.min(maxS, newS)); } return; 
-        } this.state.v = newV; this.state.s = Math.max(0, Math.min(maxS, newS)); 
-        this.state.history.t.push(this.state.t); this.state.history.v.push(this.state.v); this.state.history.s.push(this.state.s); if (this.state.history.t.length > 800) { this.state.history.t.shift(); this.state.history.v.shift(); this.state.history.s.shift(); } 
+    updatePhysics(dt) {
+        const groundY = 430;
+        const radius = 16;
+        const { vx, g } = this.initValues;
+        
+        this.state.t += dt;
+        let newVy = this.state.vy + g * dt;
+        let newY = this.state.y + this.state.vy * dt;
+        let newX = this.state.x + this.state.vx * dt;
+
+        // 1. 落地碰撞
+        if (newY >= groundY - radius) {
+            this.state.y = groundY - radius;
+            this.state.vx = 0;
+            this.state.vy = 0;
+            this.state.playing = false;
+            document.getElementById('play-btn').innerHTML = '▶ 开始';
+        } else {
+            this.state.y = newY;
+            this.state.vy = newVy;
+            this.state.x = newX;
+        }
+        
+        // 2. 轨迹记录
+        if (this.state.playing || this.state.vy !== 0) {
+            this.state.historyX.push(this.state.x);
+            this.state.historyY.push(this.state.y);
+            if (this.state.historyX.length > 800) {
+                this.state.historyX.shift();
+                this.state.historyY.shift();
+            }
+        }
+
+        // 3. 【核心功能】四周边界检测与自动重置
+        // 只要球离开画布四周 150 像素，就立刻触发重置
+        if (this.state.y < -150 || this.state.y > 600 || 
+            this.state.x < -150 || this.state.x > 950) {
+            this.reset(); // 注意：这里调用的是 reset，会清空轨迹和时间
+        }
     },
     drawGrid(c) { const s = document.body.classList.contains('dark') ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'; c.strokeStyle = s; c.lineWidth = 1; for (let x=0; x<c.canvas.width; x+=40) { c.beginPath(); c.moveTo(x,0); c.lineTo(x,c.canvas.height); c.stroke(); } for (let y=0; y<c.canvas.height; y+=40) { c.beginPath(); c.moveTo(0,y); c.lineTo(c.canvas.width,y); c.stroke(); } },
     draw() {
@@ -134,23 +167,19 @@ const UniformModule = {
         c.shadowBlur = 0; c.shadowOffsetX = 0; c.shadowOffsetY = 0; c.strokeStyle = '#475569'; c.lineWidth=2; c.strokeRect(-20, -16, 40, 32);
         c.restore();
 
-        // 【修复】采用缩短箭杆法，消除底座矩形
         if (Math.abs(this.state.v) > 0.1) {
             const len = this.state.v * 8;
             const d = this.state.v > 0 ? 1 : -1;
-            const ex = len, ey = -25; // 尖端
+            const ex = len, ey = -25;
             const headLen = 10;
             const baseX = ex - headLen * d;
             const baseY = ey;
             c.save(); c.translate(bx, by); c.rotate(angle);
             c.strokeStyle = '#ef4444'; c.lineWidth = 3;
-            c.beginPath(); c.moveTo(0, -25); c.lineTo(baseX, baseY); c.stroke(); // 缩短的箭杆
+            c.beginPath(); c.moveTo(0, -25); c.lineTo(baseX, baseY); c.stroke();
             c.fillStyle = '#ef4444';
             const hw = 6;
-            c.beginPath(); c.moveTo(ex, ey); // 尖端
-            c.lineTo(baseX, baseY - hw);
-            c.lineTo(baseX, baseY + hw);
-            c.closePath(); c.fill();
+            c.beginPath(); c.moveTo(ex, ey); c.lineTo(baseX, baseY - hw); c.lineTo(baseX, baseY + hw); c.closePath(); c.fill();
             c.restore();
         }
         
@@ -222,20 +251,16 @@ const FreefallModule = {
         const gr = c.createRadialGradient(-5, -5, 0, 0, 0, 18); gr.addColorStop(0, '#f1f5f9'); gr.addColorStop(1, '#64748b'); c.fillStyle=gr; c.beginPath(); c.arc(0,0,18,0,Math.PI*2); c.fill(); 
         c.restore();
 
-        // 【修复】采用缩短箭杆法，消除底座矩形
         if (this.state.v > 0.1) {
             const len = Math.min(this.state.v * 3, 80);
-            const ex = bx + 30, ey = by + len; // 尖端
+            const ex = bx + 30, ey = by + len;
             const headLen = 12;
-            const baseY = ey - headLen; // 因为箭头垂直向下
+            const baseY = ey - headLen;
             c.strokeStyle = '#fbbf24'; c.lineWidth = 3;
-            c.beginPath(); c.moveTo(bx + 30, by); c.lineTo(bx + 30, baseY); c.stroke(); // 缩短箭杆
+            c.beginPath(); c.moveTo(bx + 30, by); c.lineTo(bx + 30, baseY); c.stroke();
             c.fillStyle = '#fbbf24';
             const hw = 6;
-            c.beginPath(); c.moveTo(ex, ey); // 尖端
-            c.lineTo(bx + 30 - hw, baseY);
-            c.lineTo(bx + 30 + hw, baseY);
-            c.closePath(); c.fill();
+            c.beginPath(); c.moveTo(ex, ey); c.lineTo(bx + 30 - hw, baseY); c.lineTo(bx + 30 + hw, baseY); c.closePath(); c.fill();
         }
         drawLineChart(document.getElementById('vtChart').getContext('2d'), document.getElementById('vtChart'), this.state.history.t, this.state.history.v, '#fbbf24', 't / s', 'v / (m·s⁻¹)');
         drawLineChart(document.getElementById('stChart').getContext('2d'), document.getElementById('stChart'), this.state.history.t, this.state.history.s, '#4ade80', 't / s', 's / m');
@@ -243,6 +268,7 @@ const FreefallModule = {
     },
     updateDataPanel() { const t = Math.sqrt(2 * this.initValues.h / this.initValues.g); const dataItem = (label, value, unit) => `<div class="flex justify-between items-center py-2 border-t border-border-color first:border-0 hover:bg-black/5 dark:hover:bg-white/5 transition-colors rounded px-2 -mx-2"><span class="text-secondary text-sm">${label}</span><span class="data-display font-medium text-main">${value} <span class="text-xs text-muted">${unit}</span></span></div>`; document.getElementById('data-container').innerHTML = dataItem('下落时间', this.state.t.toFixed(2), 's') + dataItem('瞬时速度', this.state.v.toFixed(2), 'm/s') + dataItem('下落距离', this.state.s.toFixed(2), 'm') + dataItem('理论落地时间', t.toFixed(2), 's'); }
 };
+
 // ==================== 3. 单摆实验 ====================
 const PendulumModule = {
     id: 'pendulum', title: '单摆实验', desc: '简谐运动周期研究',
@@ -278,12 +304,9 @@ const PendulumModule = {
             const vy = by - d*Math.sin(this.state.theta)*vMag*20; 
             const angle = Math.atan2(vy - by, vx - bx);
             const headLen = 12;
-            
-            // 【修复】缩短箭杆 + 纯净锐角三角覆盖
-            const ex = vx, ey = vy; // 尖端坐标
+            const ex = vx, ey = vy;
             const baseX = ex - headLen * Math.cos(angle);
             const baseY = ey - headLen * Math.sin(angle);
-            
             c.strokeStyle = '#fbbf24'; c.lineWidth = 3; 
             c.beginPath(); c.moveTo(bx, by); c.lineTo(baseX, baseY); c.stroke(); 
             c.fillStyle = '#fbbf24';
@@ -377,6 +400,7 @@ const DoublePendulumModule = {
         document.getElementById('data-container').innerHTML = dataItem('运行时间', this.state.t.toFixed(2), 's') + dataItem('上摆角 θ₁', (this.state.theta1 * 180 / Math.PI).toFixed(1), '°') + dataItem('下摆角 θ₂', (this.state.theta2 * 180 / Math.PI).toFixed(1), '°') + dataItem('角速度 ω₁', this.state.omega1.toFixed(2), 'rad/s');
     }
 };
+
 // ==================== 5. 平抛运动实验 ====================
 const ProjectileModule = {
     id: 'projectile', title: '平抛运动实验', desc: '二维运动合成与分解',
@@ -419,8 +443,6 @@ const ProjectileModule = {
         const { vx, vy } = this.state; const minSpeed = 0.5; const showVx = Math.abs(vx) > minSpeed; const showVy = Math.abs(vy) > minSpeed;
         if (showVx || showVy) {
             const arrowScale = 2.0; const maxLen = 120; const startX = x, startY = y + 24; const vxEnd = startX + vx * arrowScale; const vyEnd = startY + vy * arrowScale;
-            
-            // 【核心修复】将底座中心独立计算，使箭杆严格停于底座中心，消除尖端重叠方形
             const drawArrow = (startX, startY, endX, endY, color, label) => {
                 const dx = endX - startX, dy = endY - startY;
                 const mag = Math.hypot(dx, dy);
@@ -429,25 +451,18 @@ const ProjectileModule = {
                 const len = Math.min(mag, maxLen);
                 const ex = startX + ux * len;
                 const ey = startY + uy * len;
-                
                 const headLen = 12;
                 const ang = Math.atan2(uy, ux);
                 const bx = ex - headLen * Math.cos(ang);
                 const by = ey - headLen * Math.sin(ang);
-
-                // 箭杆画到底座中心即停止
                 c.strokeStyle = color; c.lineWidth = 3;
                 c.beginPath(); c.moveTo(startX, startY); c.lineTo(bx, by); c.stroke();
-                
-                // 绘制完美锐角三角形（底座汇聚于一点）
                 const offset = 6;
                 c.fillStyle = color;
                 c.beginPath(); c.moveTo(ex, ey);
                 c.lineTo(bx - offset * Math.sin(ang), by + offset * Math.cos(ang));
                 c.lineTo(bx + offset * Math.sin(ang), by - offset * Math.cos(ang));
                 c.closePath(); c.fill();
-                
-                // 文字描边...
                 c.font = 'bold 16px "Inter", sans-serif';
                 c.textAlign = 'center'; c.textBaseline = 'bottom';
                 const labelOffset = 20;
@@ -459,7 +474,6 @@ const ProjectileModule = {
                 c.fillStyle = color;
                 c.fillText(label, labelX, labelY);
             };
-
             if (showVx && showVy) { drawArrow(startX, startY, vxEnd, startY, '#3b82f6', 'vₓ'); drawArrow(startX, startY, startX, vyEnd, '#ef4444', 'vᵧ'); drawArrow(startX, startY, vxEnd, vyEnd, '#fbbf24', 'v'); }
             else { drawArrow(startX, startY, vxEnd, vyEnd, '#fbbf24', 'v'); }
         }

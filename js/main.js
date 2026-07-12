@@ -55,10 +55,32 @@ const App = {
     },
     goHome() { window.location.hash = 'main'; },
     renderHome() {
+        // 【新增】动态注入机械卡片3D拆解的CSS动画
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .mech-card .icon-wrapper { transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); transform-style: preserve-3d; }
+            .mech-card:hover .icon-wrapper { transform: rotateX(6deg) rotateY(-8deg) rotateZ(2deg) scale(1.05); }
+            .mech-card .mech-part { transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: center; }
+            /* 零件拆解动画 */
+            .mech-card:hover .part-1 { transform: translateX(-10px) translateY(-4px) rotate(-5deg) scale(1.1); }
+            .mech-card:hover .part-2 { transform: translateX(12px) translateY(6px) rotate(8deg) scale(1.1); }
+            .mech-card:hover .part-3 { transform: translateY(-15px) scale(0.9); opacity: 0.8; }
+        `;
+        document.head.appendChild(style);
+
         this.container.innerHTML = `
             <div class="mb-8 animate-fadeInUp"><h2 class="text-3xl font-bold text-main mb-2">选择实验</h2><p class="text-secondary text-sm">请选择一个物理实验开始模拟探究</p></div>
             <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                ${this.modules.map(m => `<div class="acrylic-card rounded-2xl p-6 cursor-pointer hover:scale-[1.02] transition-all" data-link href="/${m.id}"><div class="w-14 h-14 rounded-xl bg-white/40 dark:bg-white/10 flex items-center justify-center mb-4 shadow-inner">${m.icon}</div><h3 class="text-lg font-semibold mb-1 text-main">${m.title}</h3><p class="text-sm text-secondary">${m.desc}</p></div>`).join('')}
+                ${this.modules.map(m => `
+                <div class="acrylic-card mech-card rounded-2xl p-6 cursor-pointer hover:scale-[1.02] transition-all" data-link href="/${m.id}">
+                    <!-- 机械包裹层 -->
+                    <div class="w-14 h-14 rounded-xl bg-white/40 dark:bg-white/10 flex items-center justify-center mb-4 shadow-inner relative icon-wrapper">
+                        ${m.icon}
+                    </div>
+                    <h3 class="text-lg font-semibold mb-1 text-main">${m.title}</h3>
+                    <p class="text-sm text-secondary">${m.desc}</p>
+                    <div class="mt-4 text-xs text-muted font-mono tracking-wide">> EXECUTE_MODULE</div>
+                </div>`).join('')}
             </div>
         `;
     },

@@ -50,20 +50,7 @@ body.dark .speed-btn.active-speed { background: rgba(255, 255, 255, 0.20) !impor
 body.dark #sun-icon { opacity: 1; transform: translate(-50%, -50%) rotate(0deg) scale(1); }
 body.dark #moon-icon { opacity: 0; transform: translate(-50%, -50%) rotate(90deg) scale(0.8); }
 
-/* 【修改】调整 param-input 为左对齐，并去掉自带宽度限制（由外层容器控制） */
-input[type="number"].param-input { 
-    -moz-appearance: textfield; 
-    width: 100%; 
-    padding: 4px 0; 
-    text-align: left; 
-    background: transparent; 
-    border: none; 
-    border-bottom: 1px solid transparent; 
-    outline: none; 
-    color: var(--color-main); 
-    font-family: monospace; 
-    transition: border-color 0.2s; 
-}
+input[type="number"].param-input { -moz-appearance: textfield; width: 50px; padding: 2px 0; text-align: right; background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; color: var(--color-main); font-family: monospace; transition: border-color 0.2s; }
 input[type="number"].param-input:focus { border-bottom-color: #475569; }
 input[type="range"] { -webkit-appearance: none; width: 100%; height: 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.10); transition: background 0.05s linear; }
 body.dark input[type="range"] { background: rgba(255, 255, 255, 0.15); }

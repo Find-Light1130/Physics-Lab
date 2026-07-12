@@ -1,6 +1,5 @@
 const App = {
     modules: [], container: null, currentExpId: null,
-    // 【修复】添加绘制防抖计时器
     _themeDrawTimer: null,
 
     init() {
@@ -87,10 +86,10 @@ const App = {
                             <button class="glass-btn-primary px-4 py-1.5 rounded-lg text-sm font-medium" id="play-btn" onclick="App.getModule('${module.id}').togglePlay()">▶ 开始</button>
                         </div>
                     </div>
-                    <canvas id="expCanvas" width="800" height="450" class="w-full rounded-xl shadow-inner border border-white/20 dark:border-white/5"></canvas>
+                    <canvas id="expCanvas" width="800" height="450" class="w-full rounded-xl shadow-inner border border-white/20 dark:border-white/5" style="height: auto; aspect-ratio: 800 / 450;"></canvas>
                     <div class="mt-4 grid grid-cols-2 gap-4">
-                        <div class="acrylic-dark rounded-xl p-3"><p class="text-xs text-secondary mb-2 font-mono tracking-wide">速度-时间图像 (v-t)</p><canvas id="vtChart" width="440" height="160" class="w-full rounded-lg"></canvas></div>
-                        <div class="acrylic-dark rounded-xl p-3"><p class="text-xs text-secondary mb-2 font-mono tracking-wide">位移-时间图像 (s-t)</p><canvas id="stChart" width="440" height="160" class="w-full rounded-lg"></canvas></div>
+                        <div class="acrylic-dark rounded-xl p-3"><p class="text-xs text-secondary mb-2 font-mono tracking-wide">速度-时间图像 (v-t)</p><canvas id="vtChart" width="440" height="160" class="w-full rounded-lg" style="height: auto; aspect-ratio: 440 / 160;"></canvas></div>
+                        <div class="acrylic-dark rounded-xl p-3"><p class="text-xs text-secondary mb-2 font-mono tracking-wide">位移-时间图像 (s-t)</p><canvas id="stChart" width="440" height="160" class="w-full rounded-lg" style="height: auto; aspect-ratio: 440 / 160;"></canvas></div>
                     </div>
                 </div></div>
                 <div class="space-y-4 max-h-[660px] overflow-y-auto scrollbar-thin pr-2 custom-scrollbar">
@@ -111,7 +110,6 @@ const App = {
         try {
             state.init();
             state.draw();
-            // 确保 KaTeX 在初始渲染时被执行
             if (window.renderMathInElement) {
                 window.renderMathInElement(document.getElementById('theory-container'), {
                     delimiters: [{ left: '$', right: '$', display: false }],
@@ -131,24 +129,20 @@ const App = {
         toggleBtn.addEventListener('click', () => {
             document.body.classList.toggle('dark');
             localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
-            
-            // 【核心修复】加入 50ms 防抖，避免频繁点击导致绘图命令丢失
             clearTimeout(this._themeDrawTimer);
             this._themeDrawTimer = setTimeout(() => {
                 if (window._expState && window._expState.draw) {
                     window._expState.draw();
                 }
-                // 强制重新渲染 KaTeX 公式，防止硬编码颜色残留导致看不清
                 const theoryContainer = document.getElementById('theory-container');
                 if (theoryContainer && window.renderMathInElement) {
-                    // 清空内部旧渲染再触发新的，保证颜色完全适配 CSS 变量
                     theoryContainer.innerHTML = theoryContainer.innerHTML;
                     window.renderMathInElement(theoryContainer, {
                         delimiters: [{ left: '$', right: '$', display: false }],
                         throwOnError: false
                     });
                 }
-            }, 50); // 50毫秒的防抖延迟，能够轻松过滤掉快速高频点击
+            }, 50);
         });
     }
 };

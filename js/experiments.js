@@ -6,6 +6,7 @@ function getControlPoints(x0, y0, x1, y1, x2, y2, t) {
     return { cp1x: x1 - fa * (x2 - x0), cp1y: y1 - fa * (y2 - y0), cp2x: x1 + fb * (x2 - x0), cp2y: y1 + fb * (y2 - y0) };
 }
 
+// ==================== 【图表绘制引擎】 ====================
 function drawLineChart(c, canv, xData, yData, color, xLabel = 't / s', yLabel = 'v / (m·s⁻¹)') {
     c.clearRect(0, 0, canv.width, canv.height);
     if (xData.length < 2) return;
@@ -52,6 +53,7 @@ function drawLineChart(c, canv, xData, yData, color, xLabel = 't / s', yLabel = 
     c.fillText(yLabel, padding + 10, padding);
 }
 
+// ==================== 统一物理风格绘图工具 ====================
 function drawPhysicsHatch(c, startX, endX, lineY, isDark, spacing = 28) {
     const color = isDark ? '#94a3b8' : '#475569';
     c.strokeStyle = color;
@@ -72,7 +74,6 @@ function drawPhysicsHatch(c, startX, endX, lineY, isDark, spacing = 28) {
 // ==================== 1. 匀变速直线运动 ====================
 const UniformModule = {
     id: 'uniform', title: '匀变速直线运动', desc: '斜面木块下滑实验',
-    // 【恢复】去除拆解类，恢复为合并的 SVG
     icon: `<svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>`,
     state: null, speed: 1, initValues: { v0: 0, a: 4 }, slopeConfig: { startX: 100, startY: 80, endX: 700, endY: 380, pixelPerMeter: 30 },
     createState() {
@@ -101,45 +102,11 @@ const UniformModule = {
         if (this.state.bounceTimer > 0) { this.state.bounceTimer -= dt; if (this.state.bounceTimer <= 0) { this.state.bounceTimer = 0; this.reset(); return; } }
         this.updatePhysics(dt); this.draw(); this.state.animId = requestAnimationFrame(() => this.loop()); },
     step() { if (this.state.playing) return; if (this.state.bounceTimer > 0) return; this.updatePhysics(0.016 * this.speed); this.draw(); },
-    updatePhysics(dt) {
-        const groundY = 430;
-        const radius = 16;
-        const { vx, g } = this.initValues;
-        
-        this.state.t += dt;
-        let newVy = this.state.vy + g * dt;
-        let newY = this.state.y + this.state.vy * dt;
-        let newX = this.state.x + this.state.vx * dt;
-
-        // 1. 落地碰撞
-        if (newY >= groundY - radius) {
-            this.state.y = groundY - radius;
-            this.state.vx = 0;
-            this.state.vy = 0;
-            this.state.playing = false;
-            document.getElementById('play-btn').innerHTML = '▶ 开始';
-        } else {
-            this.state.y = newY;
-            this.state.vy = newVy;
-            this.state.x = newX;
-        }
-        
-        // 2. 轨迹记录
-        if (this.state.playing || this.state.vy !== 0) {
-            this.state.historyX.push(this.state.x);
-            this.state.historyY.push(this.state.y);
-            if (this.state.historyX.length > 800) {
-                this.state.historyX.shift();
-                this.state.historyY.shift();
-            }
-        }
-
-        // 3. 【核心功能】四周边界检测与自动重置
-        // 只要球离开画布四周 150 像素，就立刻触发重置
-        if (this.state.y < -150 || this.state.y > 600 || 
-            this.state.x < -150 || this.state.x > 950) {
-            this.reset(); // 注意：这里调用的是 reset，会清空轨迹和时间
-        }
+    updatePhysics(dt) { this.state.t += dt; const maxS = this.slopeConfig.maxDistance; const newV = this.state.v + this.initValues.a * dt; const newS = this.state.s + this.state.v * dt + 0.5 * this.initValues.a * dt * dt; 
+        if ((newS >= maxS && newV > 0) || (newS <= 0 && newV < 0)) { 
+            if (!this.state.bounceTimer) { this.state.bounceTimer = 0.3; this.state.v = 0; this.state.s = Math.max(0, Math.min(maxS, newS)); } return; 
+        } this.state.v = newV; this.state.s = Math.max(0, Math.min(maxS, newS)); 
+        this.state.history.t.push(this.state.t); this.state.history.v.push(this.state.v); this.state.history.s.push(this.state.s); if (this.state.history.t.length > 800) { this.state.history.t.shift(); this.state.history.v.shift(); this.state.history.s.shift(); } 
     },
     drawGrid(c) { const s = document.body.classList.contains('dark') ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'; c.strokeStyle = s; c.lineWidth = 1; for (let x=0; x<c.canvas.width; x+=40) { c.beginPath(); c.moveTo(x,0); c.lineTo(x,c.canvas.height); c.stroke(); } for (let y=0; y<c.canvas.height; y+=40) { c.beginPath(); c.moveTo(0,y); c.lineTo(c.canvas.width,y); c.stroke(); } },
     draw() {
@@ -401,7 +368,7 @@ const DoublePendulumModule = {
     }
 };
 
-// ==================== 5. 平抛运动实验 ====================
+// ==================== 5. 平抛运动实验 (包含防飞出边界保护) ====================
 const ProjectileModule = {
     id: 'projectile', title: '平抛运动实验', desc: '二维运动合成与分解',
     icon: `<svg class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`,
@@ -427,11 +394,40 @@ const ProjectileModule = {
     loop() { if (!this.state.playing) return; const now = performance.now(); let dt = (now - this.state.lastTime) / 1000 * this.speed; if (dt > 0.2) dt = 0.016 * this.speed; dt = Math.min(dt, 0.016 * this.speed); this.state.lastTime = now; this.updatePhysics(dt); this.draw(); this.state.animId = requestAnimationFrame(() => this.loop()); },
     step() { if (this.state.playing) return; this.updatePhysics(0.016 * this.speed); this.draw(); },
     updatePhysics(dt) {
-        const groundY = 430; const radius = 16; const { vx, g } = this.initValues;
-        this.state.t += dt; let newVy = this.state.vy + g * dt; let newY = this.state.y + this.state.vy * dt; let newX = this.state.x + this.state.vx * dt;
-        if (newY >= groundY - radius) { this.state.y = groundY - radius; this.state.vx = 0; this.state.vy = 0; this.state.playing = false; document.getElementById('play-btn').innerHTML = '▶ 开始'; } else { this.state.y = newY; this.state.vy = newVy; this.state.x = newX; }
-        if (this.state.playing || this.state.vy !== 0) { this.state.historyX.push(this.state.x); this.state.historyY.push(this.state.y); if (this.state.historyX.length > 800) { this.state.historyX.shift(); this.state.historyY.shift(); } }
-        if (this.state.y < -50) { this.reset(); }
+        const groundY = 430;
+        const radius = 16;
+        const { vx, g } = this.initValues;
+        
+        this.state.t += dt;
+        let newVy = this.state.vy + g * dt;
+        let newY = this.state.y + this.state.vy * dt;
+        let newX = this.state.x + this.state.vx * dt;
+
+        if (newY >= groundY - radius) {
+            this.state.y = groundY - radius;
+            this.state.vx = 0;
+            this.state.vy = 0;
+            this.state.playing = false;
+            document.getElementById('play-btn').innerHTML = '▶ 开始';
+        } else {
+            this.state.y = newY;
+            this.state.vy = newVy;
+            this.state.x = newX;
+        }
+        
+        if (this.state.playing || this.state.vy !== 0) {
+            this.state.historyX.push(this.state.x);
+            this.state.historyY.push(this.state.y);
+            if (this.state.historyX.length > 800) {
+                this.state.historyX.shift();
+                this.state.historyY.shift();
+            }
+        }
+
+        // 【核心修复】平抛四周边界保护：只要球飞出画布周边150px，立刻重置。
+        if (this.state.y < -150 || this.state.y > 600 || this.state.x < -150 || this.state.x > 950) {
+            this.reset();
+        }
     },
     drawGrid(c) { const s = document.body.classList.contains('dark') ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'; c.strokeStyle = s; c.lineWidth = 1; for (let x=0; x<c.canvas.width; x+=40) { c.beginPath(); c.moveTo(x,0); c.lineTo(x,c.canvas.height); c.stroke(); } for (let y=0; y<c.canvas.height; y+=40) { c.beginPath(); c.moveTo(0,y); c.lineTo(c.canvas.width,y); c.stroke(); } },
     draw() {
